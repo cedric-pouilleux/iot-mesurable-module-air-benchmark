@@ -17,7 +17,7 @@ bool SensorReader::initBMP(int maxAttempts, int delayBetweenMs) {
         if (bmp.begin(0x76)) {
             if (_logger) {
                 if (attempt > 1) _logger->warn("BMP280 initialized after " + String(attempt) + " attempts");
-                else _logger->info("BMP280 initialized");
+                else _logger->success("BMP280 initialized successfully");
             }
             return true;
         }
@@ -32,7 +32,7 @@ bool SensorReader::initSGP(int maxAttempts, int delayBetweenMs) {
         if (sgp.begin(&_wireSGP)) {
             if (_logger) {
                 if (attempt > 1) _logger->warn("SGP40 initialized after " + String(attempt) + " attempts");
-                else _logger->info("SGP40 initialized");
+                else _logger->success("SGP40 initialized successfully");
             }
             return true;
         }
@@ -47,7 +47,7 @@ bool SensorReader::initSGP30(int maxAttempts, int delayBetweenMs) {
         if (sgp30.begin(&_wireSGP)) {
             if (_logger) {
                 if (attempt > 1) _logger->warn("SGP30 initialized after " + String(attempt) + " attempts");
-                else _logger->info("SGP30 initialized");
+                else _logger->success("SGP30 initialized successfully");
             }
             return true;
         }
@@ -92,7 +92,7 @@ bool SensorReader::initSPS30(int maxAttempts, int delayBetweenMs) {
 }
 
 int SensorReader::scanI2C(TwoWire& wire, const char* busName) {
-    if (_logger) _logger->info(String("Scanning I2C: ") + busName);
+    if (_logger) _logger->info(String("Scanning I2C bus: ") + busName + "...");
     
     int nDevices = 0;
     for (byte address = 1; address < 127; address++) {
@@ -106,7 +106,9 @@ int SensorReader::scanI2C(TwoWire& wire, const char* busName) {
     }
     
     if (nDevices == 0 && _logger) {
-        _logger->warn(String("No I2C devices on ") + busName);
+        _logger->warn(String("No I2C devices found on ") + busName);
+    } else if (_logger) {
+        _logger->info("Scan complete on " + String(busName) + ", devices: " + String(nDevices));
     }
     return nDevices;
 }
@@ -323,7 +325,7 @@ bool SensorReader::initSHT(int maxAttempts, int delayBetweenMs) {
             delay(100);
             if (_logger) {
                 if (attempt > 1) _logger->warn("SHT31 initialized after " + String(attempt) + " attempts");
-                else _logger->info("SHT31 initialized (100kHz)");
+                else _logger->success("SHT31 initialized successfully (100kHz)");
             }
             return true;
         }
