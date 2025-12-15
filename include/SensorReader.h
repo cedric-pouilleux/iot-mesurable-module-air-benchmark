@@ -8,12 +8,13 @@
 #include <Adafruit_SGP30.h>
 #include <Adafruit_SHT31.h>
 #include <SensirionUartSps30.h>
+#include <SoftwareSerial.h>
 #include "SensorData.h"
 
 class RemoteLogger; // Forward declaration
 
 /**
- * @brief Handles communication with all connected sensors (BMP280, SGP40, SGP30, DHT, CO2).
+ * @brief Handles communication with all connected sensors (BMP280, SGP40, SGP30, DHT, CO2, CO).
  * 
  * Responsible for:
  * - Initialization and re-initialization (reset)
@@ -24,7 +25,7 @@ class RemoteLogger; // Forward declaration
 class SensorReader {
 public:
     // SGP40 and SGP30 will use the second I2C bus (wireSGP)
-    SensorReader(HardwareSerial& co2Serial, HardwareSerial& sps30Serial, DHT_Unified& dht, TwoWire& wireSGP);
+    SensorReader(HardwareSerial& co2Serial, HardwareSerial& sps30Serial, DHT_Unified& dht, TwoWire& wireSGP, SoftwareSerial& coSerial);
     
     /**
      * @brief Injects the logger instance for remote reporting.
@@ -166,11 +167,32 @@ public:
      * @brief Resets the SHT3x sensor.
      */
     void resetSHT();
+
+    // ============ SC16-CO (Carbon Monoxide) ============
+    
+    /**
+     * @brief Initializes the SC16-CO sensor (SoftwareSerial).
+     * @return true if successful, false otherwise.
+     */
+    bool initCO();
+
+    /**
+     * @brief Reads CO concentration from SC16-CO sensor.
+     * The sensor auto-uploads data every ~1 second.
+     * @return CO ppm value, or -1 on error/no data.
+     */
+    int readCO();
+
+    /**
+     * @brief Clears the CO serial buffer.
+     */
+    void resetCOBuffer();
     
 private:
     RemoteLogger* _logger = nullptr;
     HardwareSerial& co2Serial;
     HardwareSerial& sps30Serial;
+    SoftwareSerial& _coSerial;
     DHT_Unified& dht;
     TwoWire& _wireSGP;
     Adafruit_SGP40 sgp;
@@ -179,6 +201,10 @@ private:
     Adafruit_BMP280 bmp;
     SensirionUartSps30 sps30;
     static const uint8_t CO2_READ_CMD[9];
+    
+    // SC16-CO buffer for parsing auto-upload frames
+    uint8_t _coBuffer[9];
+    int _coBufferIndex = 0;
 };
 
 #endif

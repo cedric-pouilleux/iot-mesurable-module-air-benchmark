@@ -16,8 +16,9 @@ static void staticOnMqttConnected() {
 AppController::AppController() 
     : co2Serial(2), 
       sps30Serial(1),
+      coSerial(16, 17),  // SC16-CO on GPIO 16 (RX), 17 (TX)
       dht(4, DHT22), 
-      sensorReader(co2Serial, sps30Serial, dht, Wire1), 
+      sensorReader(co2Serial, sps30Serial, dht, Wire1, coSerial), 
       statusPublisher(network, co2Serial, dht),
       mqttHandler(sensorReader, sensorConfig),
       logger(nullptr) 
@@ -88,6 +89,10 @@ void AppController::initSensors() {
     bool sgp30Ok = sensorReader.initSGP30();
     bool sps30Ok = sensorReader.initSPS30();
     bool shtOk = sensorReader.initSHT();
+    
+    // Initialize SC16-CO (SoftwareSerial)
+    coSerial.begin(9600);
+    bool coOk = sensorReader.initCO();
 
     if (logger) {
         if (bmpOk) logger->success("✓ BMP280 initialized");
@@ -104,6 +109,9 @@ void AppController::initSensors() {
 
         if (shtOk) logger->success("✓ SHT3x initialized");
         else logger->error("✗ SHT3x init failed");
+        
+        if (coOk) logger->success("✓ SC16-CO initialized");
+        else logger->warn("⚠ SC16-CO not detected (will retry)");
         
         logger->success("✓ MH-Z14A (CO2) Serial initialized");
         logger->success("✓ DHT22 Sensor initialized");
@@ -137,7 +145,10 @@ void AppController::initSensors() {
     
     // SGP30: +12s (Publish), Read is 1Hz
     lastSgp30PublishTime = now - sensorConfig.eco2Interval + 12000;
-    lastSgp30ReadTime = now - 1000; 
+    lastSgp30ReadTime = now - 1000;
+    
+    // SC16-CO (Carbon Monoxide): +14s
+    lastCoReadTime = now - sensorConfig.coInterval + 14000;
 
     lastSystemInfoTime = now - 5000;
 }
@@ -395,7 +406,9 @@ void AppController::handleSystemStatus() {
         publishAllConfigs();
         if (lastCO2Value > 0) {
             statusPublisher.publishSystemInfo();
-            statusPublisher.publishSensorStatus(lastCO2Value, statusCo2, lastTemperature, lastHumidity, statusDht, 
+            statusPublisher.publishSensorStatus(lastCO2Value, statusCo2, 
+                                                lastCoValue, statusCo,
+                                                lastTemperature, lastHumidity, statusDht, 
                                                 lastVocValue, statusVoc, lastPressure, statusPressure, lastTempBmp, statusTempBmp,
                                                 lastPm1, lastPm25, lastPm4, lastPm10, statusPm,
                                                 lastEco2Value, statusEco2, lastTvocValue, statusTvoc,
@@ -407,7 +420,9 @@ void AppController::handleSystemStatus() {
     if (now - lastSystemInfoTime >= 5000) {
         lastSystemInfoTime = now;
         statusPublisher.publishSystemInfo();
-        statusPublisher.publishSensorStatus(lastCO2Value, statusCo2, lastTemperature, lastHumidity, statusDht, 
+        statusPublisher.publishSensorStatus(lastCO2Value, statusCo2, 
+                                            lastCoValue, statusCo,
+                                            lastTemperature, lastHumidity, statusDht, 
                                             lastVocValue, statusVoc, lastPressure, statusPressure, lastTempBmp, statusTempBmp,
                                             lastPm1, lastPm25, lastPm4, lastPm10, statusPm,
                                             lastEco2Value, statusEco2, lastTvocValue, statusTvoc,
@@ -471,4 +486,41 @@ void AppController::publishAllConfigs() {
     statusPublisher.publishSystemConfig();
     statusPublisher.publishSensorConfig();
     if (logger) logger->debug("Published device configurations");
+}
+
+void AppController::handleSC16CO() {
+    unsigned long now = millis();
+    if (now - lastCoReadTime >= sensorConfig.coInterval) {
+        lastCoReadTime = now;
+        int co = sensorReader.readCO();
+        
+        if (co >= 0) {
+            lastCoValue = co;
+            statusCo = "ok";
+            errCo = 0;
+            network.publishValue("/co", co);
+            if (logger) {
+                char msg[48]; snprintf(msg, sizeof(msg), "📤 CO: %d ppm", co);
+                logger->info(msg);
+            }
+        } else if (co == -1) {
+            // No data available - sensor might not be connected
+            statusCo = "missing";
+            errCo++;
+            if (errCo > 10) {
+                if (logger) logger->warn("⚠️ SC16-CO no data: sensor missing?");
+                sensorReader.resetCOBuffer();
+                errCo = 0;
+            }
+        } else {
+            // Error reading
+            statusCo = "error";
+            errCo++;
+            if (errCo > 5) {
+                if (logger) logger->warn("⚠️ SC16-CO self-healing: Resetting buffer...");
+                sensorReader.resetCOBuffer();
+                errCo = 0;
+            }
+        }
+    }
 }

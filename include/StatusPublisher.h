@@ -13,8 +13,10 @@ public:
     
     void publishSystemInfo();
     void publishSystemConfig();
-    void publishSensorStatus(int lastCO2Value, const String& statusCo2, float lastTemperature, 
-                            float lastHumidity, const String& statusDht, int lastVocValue, const String& statusVoc,
+    void publishSensorStatus(int lastCO2Value, const String& statusCo2, 
+                            int lastCoValue, const String& statusCo,
+                            float lastTemperature, float lastHumidity, const String& statusDht, 
+                            int lastVocValue, const String& statusVoc,
                             float lastPressure, const String& statusPressure, float lastTempBmp, const String& statusTempBmp,
                             float lastPm1, float lastPm25, float lastPm4, float lastPm10, const String& statusPm,
                             int lastEco2, const String& statusEco2, int lastTvoc, const String& statusTvoc,
@@ -27,8 +29,10 @@ private:
     DHT_Unified& dht;
     
     String buildSystemJson(const SystemInfo& sysInfo, const String& psramStr);
-    String buildSensorStatusJson(int lastCO2Value, const String& statusCo2, float lastTemperature, 
-                                float lastHumidity, const String& statusDht, int lastVocValue, const String& statusVoc,
+    String buildSensorStatusJson(int lastCO2Value, const String& statusCo2, 
+                                int lastCoValue, const String& statusCo,
+                                float lastTemperature, float lastHumidity, const String& statusDht, 
+                                int lastVocValue, const String& statusVoc,
                                 float lastPressure, const String& statusPressure, float lastTempBmp, const String& statusTempBmp,
                                 float lastPm1, float lastPm25, float lastPm4, float lastPm10, const String& statusPm,
                                 int lastEco2, const String& statusEco2, int lastTvoc, const String& statusTvoc,

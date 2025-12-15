@@ -28,6 +28,7 @@ struct SensorConfig {
     unsigned long eco2Interval = 60000;
     unsigned long tvocInterval = 60000;
     unsigned long shtInterval = 60000;
+    unsigned long coInterval = 60000;  // SC16-CO (Carbon Monoxide)
 };
 
 #endif

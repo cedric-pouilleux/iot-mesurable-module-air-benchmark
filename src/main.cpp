@@ -33,6 +33,7 @@ void loop() {
         app.handleSHT3x();        // Measure Temp/Hum (SHT3x)
         app.handleSPS30();        // Measure PM (SPS30)
         app.handleBMP280();       // Measure Pressure & Temperature
+        app.handleSC16CO();       // Measure CO (Carbon Monoxide)
         app.handleSystemStatus(); // Publish System Info (RSSI, Uptime)
     }
 }

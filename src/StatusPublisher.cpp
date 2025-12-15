@@ -94,8 +94,10 @@ void StatusPublisher::publishHardwareConfig() {
     network.publishMessage("/hardware/config", hardwareConfigMsg, true);
 }
 
-String StatusPublisher::buildSensorStatusJson(int lastCO2Value, const String& statusCo2, float lastTemperature, 
-                                              float lastHumidity, const String& statusDht, int lastVocValue, const String& statusVoc,
+String StatusPublisher::buildSensorStatusJson(int lastCO2Value, const String& statusCo2, 
+                                              int lastCoValue, const String& statusCo,
+                                              float lastTemperature, float lastHumidity, const String& statusDht, 
+                                              int lastVocValue, const String& statusVoc,
                                               float lastPressure, const String& statusPressure, float lastTempBmp, const String& statusTempBmp,
                                               float lastPm1, float lastPm25, float lastPm4, float lastPm10, const String& statusPm,
                                               int lastEco2, const String& statusEco2, int lastTvoc, const String& statusTvoc,
@@ -140,10 +142,14 @@ String StatusPublisher::buildSensorStatusJson(int lastCO2Value, const String& st
     if (isnan(lastHumSht)) strcpy(humShtStr, "null");
     else snprintf(humShtStr, sizeof(humShtStr), "%.1f", lastHumSht);
 
-    char sensorStatusMsg[1280]; // Increased buffer size to be safe
+    char sensorStatusMsg[1400]; // Increased buffer size for CO
     snprintf(sensorStatusMsg, sizeof(sensorStatusMsg), 
         "{"
             "\"co2\":{"
+                "\"status\":\"%s\","
+                "\"value\":%d"
+            "},"
+            "\"co\":{"
                 "\"status\":\"%s\","
                 "\"value\":%d"
             "},"
@@ -202,6 +208,8 @@ String StatusPublisher::buildSensorStatusJson(int lastCO2Value, const String& st
         "}",
         statusCo2.c_str(),
         lastCO2Value,
+        statusCo.c_str(),
+        lastCoValue,
         statusDht.c_str(),
         tempStr,
         statusDht.c_str(),
@@ -236,6 +244,7 @@ void StatusPublisher::publishSensorConfig() {
     snprintf(sensorConfigMsg, sizeof(sensorConfigMsg), 
         "{"
             "\"co2\":{\"model\":\"MH-Z14A\"},"
+            "\"co\":{\"model\":\"SC16-CO\"},"
             "\"temperature\":{\"model\":\"DHT22\"},"
             "\"humidity\":{\"model\":\"DHT22\"},"
             "\"pm1\":{\"model\":\"SPS30\"},"
@@ -269,8 +278,10 @@ void StatusPublisher::publishSystemInfo() {
     network.publishMessage("/system", systemMsg.c_str(), false);
 }
 
-void StatusPublisher::publishSensorStatus(int lastCO2Value, const String& statusCo2, float lastTemperature, 
-                                          float lastHumidity, const String& statusDht, int lastVocValue, const String& statusVoc,
+void StatusPublisher::publishSensorStatus(int lastCO2Value, const String& statusCo2, 
+                                          int lastCoValue, const String& statusCo,
+                                          float lastTemperature, float lastHumidity, const String& statusDht, 
+                                          int lastVocValue, const String& statusVoc,
                                           float lastPressure, const String& statusPressure, float lastTempBmp, const String& statusTempBmp,
                                           float lastPm1, float lastPm25, float lastPm4, float lastPm10, const String& statusPm,
                                           int lastEco2, const String& statusEco2, int lastTvoc, const String& statusTvoc,
@@ -279,8 +290,10 @@ void StatusPublisher::publishSensorStatus(int lastCO2Value, const String& status
         return;
     }
 
-    String sensorStatusMsg = buildSensorStatusJson(lastCO2Value, statusCo2, lastTemperature, 
-                                                   lastHumidity, statusDht, lastVocValue, statusVoc,
+    String sensorStatusMsg = buildSensorStatusJson(lastCO2Value, statusCo2, 
+                                                   lastCoValue, statusCo,
+                                                   lastTemperature, lastHumidity, statusDht, 
+                                                   lastVocValue, statusVoc,
                                                    lastPressure, statusPressure, lastTempBmp, statusTempBmp,
                                                    lastPm1, lastPm25, lastPm4, lastPm10, statusPm,
                                                    lastEco2, statusEco2, lastTvoc, statusTvoc,

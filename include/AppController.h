@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <HardwareSerial.h>
+#include <SoftwareSerial.h>
 #include <DHT_U.h>
 #include "NetworkManager.h"
 #include "SensorReader.h"
@@ -33,6 +34,7 @@ public:
     void handleSGP30();    // eCO2/TVOC Sensor (SGP30)
     void handleSHT3x();    // Temp/Hum Sensor (SHT3x)
     void handleBMP280();   // Pressure/Temp Sensor
+    void handleSC16CO();   // CO Sensor (SC16-CO)
     void handleSystemStatus(); // System Info
     
     bool isNetworkReady();
@@ -51,6 +53,7 @@ private:
     // Hardware Interface
     HardwareSerial co2Serial;
     HardwareSerial sps30Serial;
+    SoftwareSerial coSerial;  // SC16-CO (Carbon Monoxide)
     DHT_Unified dht;
 
     // Subsystems
@@ -73,6 +76,7 @@ private:
     unsigned long lastPmReadTime = 0;
     unsigned long lastShtReadTime = 0;
     unsigned long lastPressureReadTime = 0;
+    unsigned long lastCoReadTime = 0;  // SC16-CO
     unsigned long lastSystemInfoTime = 0;
     
     bool mqttJustConnected = false;
@@ -86,12 +90,14 @@ private:
     int errSps30 = 0;
     int errBmp = 0;
     int errSht = 0;
+    int errCo = 0;  // SC16-CO
 
     // Last Values
     int lastCO2Value = 0;
     int lastVocValue = 0;
     int lastEco2Value = 0;
     int lastTvocValue = 0;
+    int lastCoValue = 0;  // SC16-CO
     float lastTemperature = 0.0;
     float lastHumidity = 0.0;
     float lastPressure = 0.0;
@@ -115,6 +121,7 @@ private:
     String statusTempSht = "init";
     String statusHumSht = "init";
     String statusPm = "init";
+    String statusCo = "init";  // SC16-CO
 
     void publishAllConfigs();
 };

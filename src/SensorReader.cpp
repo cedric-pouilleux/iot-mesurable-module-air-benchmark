@@ -4,8 +4,8 @@
 
 const uint8_t SensorReader::CO2_READ_CMD[9] = { 0xFF, 0x01, 0x86, 0, 0, 0, 0, 0, 0x79 };
 
-SensorReader::SensorReader(HardwareSerial& co2Serial, HardwareSerial& sps30Serial, DHT_Unified& dht, TwoWire& wireSGP) 
-    : co2Serial(co2Serial), sps30Serial(sps30Serial), dht(dht), _wireSGP(wireSGP), sht(&wireSGP) {
+SensorReader::SensorReader(HardwareSerial& co2Serial, HardwareSerial& sps30Serial, DHT_Unified& dht, TwoWire& wireSGP, SoftwareSerial& coSerial) 
+    : co2Serial(co2Serial), sps30Serial(sps30Serial), _coSerial(coSerial), dht(dht), _wireSGP(wireSGP), sht(&wireSGP) {
 }
 
 void SensorReader::setLogger(RemoteLogger* logger) {
@@ -367,4 +367,89 @@ void SensorReader::resetSHT() {
         if (_logger) _logger->error("SHT3x reset failed");
         recoverI2C(32, 33);
     }
+}
+
+// ============ SC16-CO (Carbon Monoxide) ============
+
+bool SensorReader::initCO() {
+    // SoftwareSerial is already configured by AppController
+    // Just clear the buffer and check if data is arriving
+    _coBufferIndex = 0;
+    memset(_coBuffer, 0, sizeof(_coBuffer));
+    
+    // Wait briefly and check if any data arrives (sensor auto-uploads)
+    unsigned long start = millis();
+    while (_coSerial.available() == 0 && millis() - start < 2000) {
+        delay(100);
+    }
+    
+    if (_coSerial.available() > 0) {
+        // Sensor is responding
+        while (_coSerial.available()) _coSerial.read(); // Clear buffer
+        if (_logger) _logger->success("SC16-CO initialized successfully");
+        return true;
+    }
+    
+    if (_logger) _logger->warn("SC16-CO not detected (no auto-upload data)");
+    return false;
+}
+
+int SensorReader::readCO() {
+    // SC16-CO auto-uploads data every ~1 second
+    // Frame format: 0xFF, 0x04, HIGH, LOW, FULL_HIGH, FULL_LOW, RESERVED, RESERVED, CHECKSUM
+    // CO ppm = HIGH * 256 + LOW
+    
+    int bytesAvailable = _coSerial.available();
+    if (bytesAvailable == 0) {
+        return -1; // No data available
+    }
+    
+    // Read all available bytes and look for valid frame
+    while (_coSerial.available()) {
+        uint8_t b = _coSerial.read();
+        
+        // Look for frame start (0xFF)
+        if (_coBufferIndex == 0 && b != 0xFF) {
+            continue; // Skip until we find start byte
+        }
+        
+        _coBuffer[_coBufferIndex++] = b;
+        
+        // Check if we have a complete frame (9 bytes)
+        if (_coBufferIndex >= 9) {
+            // Validate frame: starts with 0xFF, 0x04 for CO concentration
+            if (_coBuffer[0] == 0xFF && _coBuffer[1] == 0x04) {
+                // Calculate checksum
+                uint8_t checksum = 0;
+                for (int i = 1; i < 8; i++) {
+                    checksum += _coBuffer[i];
+                }
+                checksum = 0xFF - checksum + 1;
+                
+                if (checksum == _coBuffer[8]) {
+                    // Valid frame - extract CO value
+                    int co_ppm = _coBuffer[2] * 256 + _coBuffer[3];
+                    _coBufferIndex = 0;
+                    
+                    // SC16-CO range is typically 0-1000 ppm
+                    if (co_ppm >= 0 && co_ppm <= 1000) {
+                        return co_ppm;
+                    } else {
+                        return -3; // Out of range
+                    }
+                }
+            }
+            
+            // Invalid frame, reset and continue
+            _coBufferIndex = 0;
+        }
+    }
+    
+    return -2; // Incomplete frame
+}
+
+void SensorReader::resetCOBuffer() {
+    while (_coSerial.available()) _coSerial.read();
+    _coBufferIndex = 0;
+    if (_logger) _logger->info("CO buffer cleared");
 }
