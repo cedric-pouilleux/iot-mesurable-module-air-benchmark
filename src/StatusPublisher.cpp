@@ -40,6 +40,7 @@ void StatusPublisher::publishSystemConfig() {
     char systemConfigMsg[768];
     snprintf(systemConfigMsg, sizeof(systemConfigMsg), 
         "{"
+            "\"moduleType\":\"air-quality-bench\","
             "\"ip\":\"%s\","
             "\"mac\":\"%s\","
             "\"uptimeStart\":%lu,"
