@@ -58,25 +58,47 @@ pio run -t upload
 
 ## 📡 Topics MQTT
 
-### Topics Publiés
+### Format des Topics
 
-| Topic | Description | Unité |
-|-------|-------------|-------|
-| `{moduleId}/temperature` | Température (DHT22 ou SHT31) | °C |
-| `{moduleId}/humidity` | Humidité (DHT22 ou SHT31) | % |
-| `{moduleId}/temperature_bmp` | Température BMP280 | °C |
-| `{moduleId}/pressure` | Pression atmosphérique | hPa |
-| `{moduleId}/co2` | CO2 (MH-Z14A) | ppm |
-| `{moduleId}/voc` | Indice VOC (SGP40) | 0-500 |
-| `{moduleId}/eco2` | eCO2 équivalent (SGP30) | ppm |
-| `{moduleId}/tvoc` | TVOC (SGP30) | ppb |
-| `{moduleId}/pm1` | Particules PM1.0 | µg/m³ |
-| `{moduleId}/pm25` | Particules PM2.5 | µg/m³ |
-| `{moduleId}/pm4` | Particules PM4.0 | µg/m³ |
-| `{moduleId}/pm10` | Particules PM10 | µg/m³ |
-| `{moduleId}/sensors/status` | Statut JSON de tous les capteurs | - |
-| `{moduleId}/system` | Infos système (IP, RSSI, Mémoire) | - |
-| `{moduleId}/logs` | Logs remote pour debug | - |
+Les mesures sont publiées en utilisant un format **hardware-aware** :
+
+```
+{moduleId}/{hardwareId}/{measurement}
+```
+
+**Exemples :**
+- `croissance/dht22/temperature` → Température du DHT22
+- `croissance/bmp280/temperature` → Température du BMP280
+- `croissance/sps30/pm25` → PM2.5 du SPS30
+
+### Topics de Mesures
+
+| Hardware | Topic | Mesure | Unité |
+|----------|-------|--------|-------|
+| **dht22** | `{moduleId}/dht22/temperature` | Température | °C |
+| **dht22** | `{moduleId}/dht22/humidity` | Humidité | % |
+| **bmp280** | `{moduleId}/bmp280/temperature` | Température | °C |
+| **bmp280** | `{moduleId}/bmp280/pressure` | Pression | hPa |
+| **sgp40** | `{moduleId}/sgp40/voc` | Indice VOC | 0-500 |
+| **sgp30** | `{moduleId}/sgp30/eco2` | eCO2 | ppm |
+| **sgp30** | `{moduleId}/sgp30/tvoc` | TVOC | ppb |
+| **mhz14a** | `{moduleId}/mhz14a/co2` | CO2 | ppm |
+| **sps30** | `{moduleId}/sps30/pm1` | PM1.0 | µg/m³ |
+| **sps30** | `{moduleId}/sps30/pm25` | PM2.5 | µg/m³ |
+| **sps30** | `{moduleId}/sps30/pm4` | PM4.0 | µg/m³ |
+| **sps30** | `{moduleId}/sps30/pm10` | PM10 | µg/m³ |
+| **sht40** | `{moduleId}/sht40/temperature` | Température | °C |
+| **sht40** | `{moduleId}/sht40/humidity` | Humidité | % |
+| **mq7** | `{moduleId}/mq7/co` | Monoxyde de carbone | ppm |
+
+### Topics Système
+
+| Topic | Description |
+|-------|-------------|
+| `{moduleId}/sensors/status` | Statut JSON de tous les capteurs |
+| `{moduleId}/system` | Infos système (IP, RSSI, Mémoire) |
+| `{moduleId}/system/config` | Configuration système |
+| `{moduleId}/logs` | Logs remote pour debug |
 
 ### Topics Souscrits (Commandes)
 
