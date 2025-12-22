@@ -9,9 +9,11 @@
 #include <Adafruit_SHT31.h>
 #include <SensirionUartSps30.h>
 #include <SoftwareSerial.h>
-#include "SensorData.h"
-
-class RemoteLogger; // Forward declaration
+struct DhtReading {
+    float temperature;
+    float humidity;
+    bool valid;
+};
 
 /**
  * @brief Handles communication with all connected sensors (BMP280, SGP40, SGP30, DHT, CO2, CO).
@@ -27,10 +29,6 @@ public:
     // SGP40 and SGP30 will use the second I2C bus (wireSGP)
     SensorReader(HardwareSerial& co2Serial, HardwareSerial& sps30Serial, DHT_Unified& dht, TwoWire& wireSGP, SoftwareSerial& coSerial);
     
-    /**
-     * @brief Injects the logger instance for remote reporting.
-     */
-    void setLogger(RemoteLogger* logger);
 
     /**
      * @brief Initializes the BMP280 sensor (Pressure/Temp).
@@ -189,7 +187,6 @@ public:
     void resetCOBuffer();
     
 private:
-    RemoteLogger* _logger = nullptr;
     HardwareSerial& co2Serial;
     HardwareSerial& sps30Serial;
     SoftwareSerial& _coSerial;

@@ -1,6 +1,5 @@
 #include "SensorReader.h"
 #include <Wire.h>
-#include "RemoteLogger.h"
 
 const uint8_t SensorReader::CO2_READ_CMD[9] = { 0xFF, 0x01, 0x86, 0, 0, 0, 0, 0, 0x79 };
 
@@ -8,52 +7,33 @@ SensorReader::SensorReader(HardwareSerial& co2Serial, HardwareSerial& sps30Seria
     : co2Serial(co2Serial), sps30Serial(sps30Serial), _coSerial(coSerial), dht(dht), _wireSGP(wireSGP), sht(&wireSGP) {
 }
 
-void SensorReader::setLogger(RemoteLogger* logger) {
-    _logger = logger;
-}
-
 bool SensorReader::initBMP(int maxAttempts, int delayBetweenMs) {
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         if (bmp.begin(0x76)) {
-            if (_logger) {
-                if (attempt > 1) _logger->warn("BMP280 initialized after " + String(attempt) + " attempts");
-                else _logger->success("BMP280 initialized successfully");
-            }
             return true;
         }
         if (attempt < maxAttempts) delay(delayBetweenMs);
     }
-    if (_logger) _logger->error("BMP280 not found");
     return false;
 }
 
 bool SensorReader::initSGP(int maxAttempts, int delayBetweenMs) {
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         if (sgp.begin(&_wireSGP)) {
-            if (_logger) {
-                if (attempt > 1) _logger->warn("SGP40 initialized after " + String(attempt) + " attempts");
-                else _logger->success("SGP40 initialized successfully");
-            }
             return true;
         }
         if (attempt < maxAttempts) delay(delayBetweenMs);
     }
-    if (_logger) _logger->error("SGP40 not found");
     return false;
 }
 
 bool SensorReader::initSGP30(int maxAttempts, int delayBetweenMs) {
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         if (sgp30.begin(&_wireSGP)) {
-            if (_logger) {
-                if (attempt > 1) _logger->warn("SGP30 initialized after " + String(attempt) + " attempts");
-                else _logger->success("SGP30 initialized successfully");
-            }
             return true;
         }
         if (attempt < maxAttempts) delay(delayBetweenMs);
     }
-    if (_logger) _logger->error("SGP30 not found");
     return false;
 }
 
@@ -72,43 +52,27 @@ bool SensorReader::initSPS30(int maxAttempts, int delayBetweenMs) {
         int16_t ret = sps30.readSerialNumber(serialNumber, 32);
         
         if (ret == 0) {
-            if (_logger) _logger->success("SPS30 detected: " + String((char*)serialNumber));
-            
             ret = sps30.startMeasurement(SPS30_OUTPUT_FORMAT_OUTPUT_FORMAT_FLOAT);
             if (ret == 0 || ret == 1347 || (ret & 0xFF00) == 0x0500) {
                 delay(2000);
                 float p1, p2, p4, p10;
                 if (readSPS30(p1, p2, p4, p10)) {
-                    if (_logger) _logger->success("SPS30 ready");
                     return true;
                 }
             }
         }
         delay(delayBetweenMs);
     }
-    
-    if (_logger) _logger->error("SPS30 not found");
     return false;
 }
 
 int SensorReader::scanI2C(TwoWire& wire, const char* busName) {
-    if (_logger) _logger->info(String("Scanning I2C bus: ") + busName + "...");
-    
     int nDevices = 0;
     for (byte address = 1; address < 127; address++) {
         wire.beginTransmission(address);
         if (wire.endTransmission() == 0) {
-            char msg[48];
-            snprintf(msg, sizeof(msg), "I2C found: 0x%02X on %s", address, busName);
-            if (_logger) _logger->success(msg);
             nDevices++;
         }
-    }
-    
-    if (nDevices == 0 && _logger) {
-        _logger->warn(String("No I2C devices found on ") + busName);
-    } else if (_logger) {
-        _logger->info("Scan complete on " + String(busName) + ", devices: " + String(nDevices));
     }
     return nDevices;
 }
@@ -127,11 +91,7 @@ bool SensorReader::readSPS30(float& pm1, float& pm25, float& pm4, float& pm10) {
 
     // Auto-recovery
     sps30.wakeUp();
-    int16_t startRet = sps30.startMeasurement(SPS30_OUTPUT_FORMAT_OUTPUT_FORMAT_FLOAT);
-    if (_logger) {
-        if (startRet == 0) _logger->warn("SPS30 restarted (auto-recovery)");
-        else _logger->error("SPS30 recovery failed: " + String(startRet));
-    }
+    sps30.startMeasurement(SPS30_OUTPUT_FORMAT_OUTPUT_FORMAT_FLOAT);
     return false;
 }
 
@@ -144,11 +104,9 @@ bool SensorReader::resetBMP() {
     delay(100);
 
     if (error == 0 && bmp.begin(0x76)) {
-        if (_logger) _logger->success("BMP280 soft reset OK");
         return true;
     }
 
-    if (_logger) _logger->warn("Soft reset failed, I2C recovery...");
     recoverI2C(21, 22);
     
     Wire.beginTransmission(0x76);
@@ -158,28 +116,21 @@ bool SensorReader::resetBMP() {
     delay(100);
     
     if (bmp.begin(0x76)) {
-        if (_logger) _logger->success("BMP280 reset OK (after I2C recovery)");
         return true;
     }
     
-    if (_logger) _logger->error("BMP280 reset failed");
     return false;
 }
 
 bool SensorReader::resetSGP() {
     bool success = sgp.begin(&_wireSGP);
     if (!success) {
-        if (_logger) _logger->error("SGP40 reset failed");
         recoverI2C(32, 33);
-    } else {
-        if (_logger) _logger->success("SGP40 reset OK");
     }
     return success;
 }
 
 void SensorReader::recoverI2C(int sdaPin, int sclPin) {
-    if (_logger) _logger->warn("I2C recovery: SDA=" + String(sdaPin) + " SCL=" + String(sclPin));
-
     pinMode(sdaPin, INPUT);
     pinMode(sclPin, INPUT);
     delayMicroseconds(5);
@@ -217,12 +168,10 @@ void SensorReader::recoverI2C(int sdaPin, int sclPin) {
 
 void SensorReader::resetDHT() {
     dht.begin();
-    if (_logger) _logger->info("DHT reset");
 }
 
 void SensorReader::resetCO2() {
     while (co2Serial.available()) co2Serial.read();
-    if (_logger) _logger->info("CO2 buffer cleared");
 }
 
 bool SensorReader::isSGPConnected() {
@@ -323,15 +272,10 @@ bool SensorReader::initSHT(int maxAttempts, int delayBetweenMs) {
         if (sht.begin(0x44)) {
             sht.reset();
             delay(100);
-            if (_logger) {
-                if (attempt > 1) _logger->warn("SHT31 initialized after " + String(attempt) + " attempts");
-                else _logger->success("SHT31 initialized successfully (100kHz)");
-            }
             return true;
         }
         if (attempt < maxAttempts) delay(delayBetweenMs);
     }
-    if (_logger) _logger->error("SHT31 not found");
     return false;
 }
 
@@ -360,11 +304,7 @@ bool SensorReader::readSHT(float& temp, float& hum) {
 }
 
 void SensorReader::resetSHT() {
-    if (_logger) _logger->warn("Resetting SHT3x...");
-    if (initSHT()) {
-        if (_logger) _logger->success("SHT3x reset OK");
-    } else {
-        if (_logger) _logger->error("SHT3x reset failed");
+    if (!initSHT()) {
         recoverI2C(32, 33);
     }
 }
@@ -372,54 +312,39 @@ void SensorReader::resetSHT() {
 // ============ SC16-CO (Carbon Monoxide) ============
 
 bool SensorReader::initCO() {
-    // SoftwareSerial is already configured by AppController
-    // Just clear the buffer and check if data is arriving
     _coBufferIndex = 0;
     memset(_coBuffer, 0, sizeof(_coBuffer));
     
-    // Wait briefly and check if any data arrives (sensor auto-uploads)
     unsigned long start = millis();
     while (_coSerial.available() == 0 && millis() - start < 2000) {
         delay(100);
     }
     
     if (_coSerial.available() > 0) {
-        // Sensor is responding
         while (_coSerial.available()) _coSerial.read(); // Clear buffer
-        if (_logger) _logger->success("SC16-CO initialized successfully");
         return true;
     }
     
-    if (_logger) _logger->warn("SC16-CO not detected (no auto-upload data)");
     return false;
 }
 
 int SensorReader::readCO() {
-    // SC16-CO auto-uploads data every ~1 second
-    // Frame format: 0xFF, 0x04, HIGH, LOW, FULL_HIGH, FULL_LOW, RESERVED, RESERVED, CHECKSUM
-    // CO ppm = HIGH * 256 + LOW
-    
     int bytesAvailable = _coSerial.available();
     if (bytesAvailable == 0) {
-        return -1; // No data available
+        return -1; 
     }
     
-    // Read all available bytes and look for valid frame
     while (_coSerial.available()) {
         uint8_t b = _coSerial.read();
         
-        // Look for frame start (0xFF)
         if (_coBufferIndex == 0 && b != 0xFF) {
-            continue; // Skip until we find start byte
+            continue; 
         }
         
         _coBuffer[_coBufferIndex++] = b;
         
-        // Check if we have a complete frame (9 bytes)
         if (_coBufferIndex >= 9) {
-            // Validate frame: starts with 0xFF, 0x04 for CO concentration
             if (_coBuffer[0] == 0xFF && _coBuffer[1] == 0x04) {
-                // Calculate checksum
                 uint8_t checksum = 0;
                 for (int i = 1; i < 8; i++) {
                     checksum += _coBuffer[i];
@@ -427,29 +352,25 @@ int SensorReader::readCO() {
                 checksum = 0xFF - checksum + 1;
                 
                 if (checksum == _coBuffer[8]) {
-                    // Valid frame - extract CO value
                     int co_ppm = _coBuffer[2] * 256 + _coBuffer[3];
                     _coBufferIndex = 0;
                     
-                    // SC16-CO range is typically 0-1000 ppm
                     if (co_ppm >= 0 && co_ppm <= 1000) {
                         return co_ppm;
                     } else {
-                        return -3; // Out of range
+                        return -3; 
                     }
                 }
             }
             
-            // Invalid frame, reset and continue
             _coBufferIndex = 0;
         }
     }
     
-    return -2; // Incomplete frame
+    return -2; 
 }
 
 void SensorReader::resetCOBuffer() {
     while (_coSerial.available()) _coSerial.read();
     _coBufferIndex = 0;
-    if (_logger) _logger->info("CO buffer cleared");
 }
