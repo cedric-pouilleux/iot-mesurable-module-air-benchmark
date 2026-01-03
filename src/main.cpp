@@ -27,10 +27,14 @@
 // Hardware Configuration
 // ============================================================================
 
-#define DHT_PIN 4
+#include "pins.h"  // Include pin definitions
+
+// ============================================================================
+// Hardware Configuration
+// ============================================================================
+
 #define DHT_TYPE DHT22
-#define CO_RX_PIN 14  // SC16-CO on GPIO 14 (RX)
-#define CO_TX_PIN 12  // SC16-CO on GPIO 12 (TX)
+#define MODULE_ID "module-esp32-1"
 #define MODULE_ID "module-esp32-1"
 
 // ============================================================================
@@ -43,10 +47,10 @@ TwoWire wireSGP = TwoWire(1);
 // Serial connections
 HardwareSerial co2Serial(2);   // UART2 for MH-Z14A
 HardwareSerial sps30Serial(1); // UART1 for SPS30
-SoftwareSerial coSerial(CO_RX_PIN, CO_TX_PIN);
+SoftwareSerial coSerial(PIN_UART_RX_CO_SC16, PIN_UART_TX_CO_SC16);
 
 // DHT sensor
-DHT_Unified dht(DHT_PIN, DHT_TYPE);
+DHT_Unified dht(PIN_DHT, DHT_TYPE);
 
 // Sensor reader (low-level hardware access)
 SensorReader sensors(co2Serial, sps30Serial, dht, wireSGP, coSerial);
@@ -58,19 +62,9 @@ IotMesurable brain(MODULE_ID);
 // Timing
 // ============================================================================
 
-struct SensorTiming {
-    unsigned long lastRead = 0;
-    unsigned long interval = 60000; // 60s default
-};
-
-SensorTiming timingMHZ14A;
-SensorTiming timingDHT22;
-SensorTiming timingSGP40;
-SensorTiming timingSGP30;
-SensorTiming timingSPS30;
-SensorTiming timingBMP280;
-SensorTiming timingSHT40;
-SensorTiming timingSC16CO;
+// Read sensors every 5 seconds, automatic throttling controls publish rate
+unsigned long lastRead = 0;
+const unsigned long READ_INTERVAL = 5000;
 
 // ============================================================================
 // Setup
@@ -81,12 +75,12 @@ void setup() {
     Serial.println("\n=== Air Quality Monitor (iot-mesurable) ===\n");
     
     // Initialize I2C
-    Wire.begin(21, 22);
-    wireSGP.begin(32, 33); // SGP bus on 32, 33
+    Wire.begin(PIN_I2C_SDA_MAIN, PIN_I2C_SCL_MAIN);
+    wireSGP.begin(PIN_I2C_SDA_SGP, PIN_I2C_SCL_SGP); // SGP bus
     
     // Initialize serial ports
-    co2Serial.begin(9600, SERIAL_8N1, 25, 26);  // MH-Z14A: RX=GPIO 25, TX=GPIO 26
-    sps30Serial.begin(115200, SERIAL_8N1, 13, 27); // SPS30 on 13, 27
+    co2Serial.begin(9600, SERIAL_8N1, PIN_UART_RX_CO2, PIN_UART_TX_CO2);  // MH-Z14A
+    sps30Serial.begin(115200, SERIAL_8N1, PIN_UART_RX_SPS30, PIN_UART_TX_SPS30); // SPS30
     coSerial.begin(9600);
     
     // Initialize brain (WiFi + MQTT)
@@ -131,22 +125,7 @@ void setup() {
     brain.registerHardware("sc16co", "SC16-CO Carbon Monoxide");
     brain.addSensor("sc16co", "co");
     
-    // Callbacks for config/enable changes
-    brain.onConfigChange([](const char* hw, int intervalMs) {
-        Serial.printf("[Config] %s interval: %d ms\n", hw, intervalMs);
-        if (strcmp(hw, "mhz14a") == 0) timingMHZ14A.interval = intervalMs;
-        else if (strcmp(hw, "dht22") == 0) timingDHT22.interval = intervalMs;
-        else if (strcmp(hw, "sgp40") == 0) timingSGP40.interval = intervalMs;
-        else if (strcmp(hw, "sgp30") == 0) timingSGP30.interval = intervalMs;
-        else if (strcmp(hw, "sps30") == 0) timingSPS30.interval = intervalMs;
-        else if (strcmp(hw, "bmp280") == 0) timingBMP280.interval = intervalMs;
-        else if (strcmp(hw, "sht40") == 0) timingSHT40.interval = intervalMs;
-        else if (strcmp(hw, "sc16co") == 0) timingSC16CO.interval = intervalMs;
-    });
-    
-    brain.onEnableChange([](const char* hw, bool enabled) {
-        Serial.printf("[Enable] %s: %s\n", hw, enabled ? "ON" : "OFF");
-    });
+    // Callbacks for debugging (throttling is automatic, no manual interval management needed)
 
     brain.onConnect([](bool connected) {
         Serial.printf("[MQTT] %s\n", connected ? "Connected" : "Disconnected");
@@ -221,18 +200,7 @@ void setup() {
     Serial.println("Setup complete!");
 }
 
-// ============================================================================
-// Sensor Reading Helpers
-// ============================================================================
 
-bool shouldRead(SensorTiming& timing) {
-    unsigned long now = millis();
-    if (now - timing.lastRead >= timing.interval) {
-        timing.lastRead = now;
-        return true;
-    }
-    return false;
-}
 
 // ============================================================================
 // Logging Helper
@@ -253,143 +221,87 @@ void logError(const char* msg) {
 void loop() {
     brain.loop();
     
-    static unsigned long lastDebug = 0;
-    if (millis() - lastDebug > 10000) {
-        lastDebug = millis();
-        Serial.printf("[Debug] IP: %s, MQTT: %s\n", 
-            WiFi.localIP().toString().c_str(),
-            brain.isConnected() ? "Yes" : "No");
-    }
-
-    // MH-Z14A (CO2)
-    if (brain.isHardwareEnabled("mhz14a") && shouldRead(timingMHZ14A)) {
-        int co2 = sensors.readCO2();
-        Serial.printf("[MHZ14A] CO2: %d\n", co2);
-        if (co2 > 0) {
-            brain.publish("mhz14a", "co2", co2);
-        } else {
-            Serial.println("[MHZ14A] Read failed!");
-            brain.publish("mhz14a", "co2", NAN);
-        }
-    }
+    unsigned long now = millis();
     
-    // DHT22 (Temp/Humidity)
-    if (brain.isHardwareEnabled("dht22") && shouldRead(timingDHT22)) {
-        DhtReading reading = sensors.readDhtSensors();
-        Serial.printf("[DHT22] T: %.1f, H: %.1f\n", reading.temperature, reading.humidity);
-        if (reading.valid) {
-            brain.publish("dht22", "temperature", reading.temperature);
-            brain.publish("dht22", "humidity", reading.humidity);
-        } else {
-            Serial.println("[DHT22] Read failed!");
-            brain.publish("dht22", "temperature", NAN);
-            brain.publish("dht22", "humidity", NAN);
-        }
-    }
-    
-    // SGP40 (VOC)
-    if (brain.isHardwareEnabled("sgp40") && shouldRead(timingSGP40)) {
-        int voc = sensors.readVocIndex();
-        Serial.printf("[SGP40] VOC: %d\n", voc);
-        if (voc >= 0) {
-            brain.publish("sgp40", "voc", voc);
-        } else {
-            Serial.println("[SGP40] Read failed!");
-            brain.publish("sgp40", "voc", NAN);
-        }
-    }
-    
-    // SGP30 (eCO2/TVOC)
-    if (brain.isHardwareEnabled("sgp30") && shouldRead(timingSGP30)) {
-        int eco2, tvoc;
-        if (sensors.readSGP30(eco2, tvoc)) {
-            Serial.printf("[SGP30] eCO2: %d, TVOC: %d\n", eco2, tvoc);
-            brain.publish("sgp30", "eco2", eco2);
-            brain.publish("sgp30", "tvoc", tvoc);
-        } else {
-            // Read failed or invalid (0) -> Report as missing
-            Serial.println("[SGP30] Read failed!");
-            brain.publish("sgp30", "eco2", NAN);
-            brain.publish("sgp30", "tvoc", NAN);
-        }
-    }
-    
-    // SPS30 (PM)
-    if (brain.isHardwareEnabled("sps30") && shouldRead(timingSPS30)) {
-        float pm1, pm25, pm4, pm10;
-        if (sensors.readSPS30(pm1, pm25, pm4, pm10)) {
-            Serial.printf("[SPS30] PM2.5: %.1f\n", pm25);
-            brain.publish("sps30", "pm1", pm1);
-            brain.publish("sps30", "pm25", pm25);
-            brain.publish("sps30", "pm4", pm4);
-            brain.publish("sps30", "pm10", pm10);
-        } else {
-            Serial.println("[SPS30] Read failed!");
-            brain.publish("sps30", "pm1", NAN);
-            brain.publish("sps30", "pm25", NAN);
-            brain.publish("sps30", "pm4", NAN);
-            brain.publish("sps30", "pm10", NAN);
-        }
-    }
-    
-    // BMP280 (Pressure/Temp)
-    if (brain.isHardwareEnabled("bmp280") && shouldRead(timingBMP280)) {
-        float pressure = sensors.readPressure();
-        float temp = sensors.readBMPTemperature();
-        Serial.printf("[BMP280] P: %.1f, T: %.1f\n", pressure, temp);
+    // Read all sensors every READ_INTERVAL, throttling controls publish rate
+    if (now - lastRead >= READ_INTERVAL) {
+        lastRead = now;
+        Serial.printf("[DEBUG] Reading sensors at %lu ms\n", now);
         
-        bool success = false;
-        if (!isnan(pressure)) {
-            brain.publish("bmp280", "pressure", pressure);
-            success = true;
-        } else {
-             brain.publish("bmp280", "pressure", NAN);
+        // MH-Z14A (CO2)
+        if (brain.isHardwareEnabled("mhz14a")) {
+            int co2 = sensors.readCO2();
+            if (co2 > 0) {
+                Serial.printf("[PUBLISH] mhz14a CO2=%d\n", co2);
+                brain.publish("mhz14a", "co2", co2);
+            }
         }
         
-        if (!isnan(temp)) {
-            brain.publish("bmp280", "temperature", temp);
-            success = true;
-        } else {
-            brain.publish("bmp280", "temperature", NAN);
+        // DHT22 (Temp/Humidity)
+        if (brain.isHardwareEnabled("dht22")) {
+            DhtReading reading = sensors.readDhtSensors();
+            if (reading.valid) {
+                brain.publish("dht22", "temperature", reading.temperature);
+                brain.publish("dht22", "humidity", reading.humidity);
+            }
         }
         
-        if (!success) Serial.println("[BMP280] Read failed!");
-    }
-    
-    // SHT40 (Temp/Humidity)
-    if (brain.isHardwareEnabled("sht40") && shouldRead(timingSHT40)) {
-        float temp, hum;
-        if (sensors.readSHT(temp, hum)) {
-            Serial.printf("[SHT40] T: %.1f, H: %.1f\n", temp, hum);
-            brain.publish("sht40", "temperature", temp);
-            brain.publish("sht40", "humidity", hum);
-        } else {
-            Serial.println("[SHT40] Read failed!");
-            brain.publish("sht40", "temperature", NAN);
-            brain.publish("sht40", "humidity", NAN);
+        // SGP40 (VOC)
+        if (brain.isHardwareEnabled("sgp40")) {
+            int voc = sensors.readVocIndex();
+            if (voc >= 0) {
+                brain.publish("sgp40", "voc", voc);
+            }
         }
-    }
-    
-    // SC16-CO (Carbon Monoxide)
-    if (brain.isHardwareEnabled("sc16co") && shouldRead(timingSC16CO)) {
-        int co = sensors.readCO();
-        Serial.printf("[SC16CO] CO: %d\n", co);
-        if (co >= 0) {
-            brain.publish("sc16co", "co", co);
-        } else {
-            char msg[128];
-            // Format raw hex for MQTT string
-            // Assuming _coBuffer is available only in SensorReader, we can't easily access it here.
-            // Let's modify readCO to return a struct or handle logging inside SensorReader,
-            // OR just return the error code and rely on the user checking the ACTIVITY LOGS detailed message if implemented.
-            // For now, let's trust the error code is enough to say "Bad Protocol".
-            // Actually, we can pass the error to the log.
+        
+        // SGP30 (eCO2/TVOC)
+        if (brain.isHardwareEnabled("sgp30")) {
+            int eco2, tvoc;
+            if (sensors.readSGP30(eco2, tvoc)) {
+                brain.publish("sgp30", "eco2", eco2);
+                brain.publish("sgp30", "tvoc", tvoc);
+            }
+        }
+        
+        // SPS30 (PM)
+        if (brain.isHardwareEnabled("sps30")) {
+            float pm1, pm25, pm4, pm10;
+            if (sensors.readSPS30(pm1, pm25, pm4, pm10)) {
+                brain.publish("sps30", "pm1", pm1);
+                brain.publish("sps30", "pm25", pm25);
+                brain.publish("sps30", "pm4", pm4);
+                brain.publish("sps30", "pm10", pm10);
+            }
+        }
+        
+        // BMP280 (Pressure/Temp)
+        if (brain.isHardwareEnabled("bmp280")) {
+            float pressure = sensors.readPressure();
+            float temp = sensors.readBMPTemperature();
             
-            snprintf(msg, sizeof(msg), "SC16CO Err: %d", co);
-            brain.log("error", msg);
-            
-            Serial.printf("[SC16CO] Read failed! Error code: %d\n", co);
-             brain.publish("sc16co", "co", NAN);
+            if (!isnan(pressure)) {
+                brain.publish("bmp280", "pressure", pressure);
+            }
+            if (!isnan(temp)) {
+                brain.publish("bmp280", "temperature", temp);
+            }
+        }
+        
+        // SHT40 (Temp/Humidity)
+        if (brain.isHardwareEnabled("sht40")) {
+            float temp, hum;
+            if (sensors.readSHT(temp, hum)) {
+                brain.publish("sht40", "temperature", temp);
+                brain.publish("sht40", "humidity", hum);
+            }
+        }
+        
+        // SC16-CO (Carbon Monoxide)
+        if (brain.isHardwareEnabled("sc16co")) {
+            int co = sensors.readCO();
+            if (co >= 0) {
+                brain.publish("sc16co", "co", co);
+            }
         }
     }
 }
